@@ -10,7 +10,7 @@ permissions:
   contents: read
   packages: write
 
-  jobs:
+jobs:
   lint-and-test:
     name: Code Quality & Build Checks
     runs-on: ubuntu-latest
