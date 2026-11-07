@@ -9,22 +9,30 @@ export class JobsController {
   @Post('submit')
   async submitTask(@Body('taskName') taskName: string) {
     const job = await this.taskQueue.add('processData', {
-      taskName,
+      taskName: taskName || 'Default Task',
       submittedAt: new Date().toISOString(),
     });
-    return { jobId: job.id, status: 'QUEUED' };
+    return {
+      jobId: job.id,
+      taskName: taskName || 'Default Task',
+      status: 'QUEUED',
+    };
   }
 
   @Get(':id')
   async getJobStatus(@Param('id') id: string) {
     const job = await this.taskQueue.getJob(id);
-    if (!job) return { error: 'Job not found' };
+    if (!job) {
+      return { error: 'Job not found' };
+    }
+
     const state = await job.getState();
     return {
-      id: job.id,
-      state,
-      returnvalue: job.returnvalue,
-      progress: job.progress,
+      jobId: job.id,
+      state, // 'waiting' | 'active' | 'completed' | 'failed'
+      data: job.data,
+      returnvalue: job.returnvalue || null,
+      failedReason: job.failedReason || null,
     };
   }
 }
