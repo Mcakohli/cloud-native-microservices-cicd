@@ -1,0 +1,101 @@
+version: '3.8'
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vegah-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vegah_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vegah_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-vegah_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vegah_user} -d ${POSTGRES_DB:-vegah_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vegah-redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GH_REPO_OWNER}/vegah-backend:${IMAGE_TAG:-latest}
+    container_name: vegah-backend
+    restart: always
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vegah_user}:${POSTGRES_PASSWORD:-vegah_pass}@postgres:5432/${POSTGRES_DB:-vegah_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    image: ghcr.io/${GH_REPO_OWNER}/vegah-worker:${IMAGE_TAG:-latest}
+    container_name: vegah-worker
+    restart: always
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vegah_user}:${POSTGRES_PASSWORD:-vegah_pass}@postgres:5432/${POSTGRES_DB:-vegah_db}
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GH_REPO_OWNER}/vegah-frontend:${IMAGE_TAG:-latest}
+    container_name: vegah-frontend
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
