@@ -102,8 +102,7 @@ jobs:
     name: Continuous Deployment to Cloud
     needs: build-and-push
     runs-on: ubuntu-latest
-    # Runs only when cloud secrets are configured; otherwise finishes cleanly
-    if: ${{ vars.EC2_HOST != '' || secrets.EC2_HOST != '' }}
+    if: ${{ vars.EC2_HOST != '' }}
     steps:
       - name: Deploy to Cloud Host via SSH
         uses: appleboy/ssh-action@v1.0.3
