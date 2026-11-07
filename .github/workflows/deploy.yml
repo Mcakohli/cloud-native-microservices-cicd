@@ -10,7 +10,7 @@ permissions:
   contents: read
   packages: write
 
-jobs:
+  jobs:
   lint-and-test:
     name: Code Quality & Build Checks
     runs-on: ubuntu-latest
@@ -22,9 +22,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: |
-            '**/package-lock.json'
 
       - name: Compile Backend
         run: |
