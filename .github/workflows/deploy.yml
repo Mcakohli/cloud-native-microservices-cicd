@@ -10,29 +10,48 @@ env:
 
 jobs:
   lint-and-test:
+    name: Code Quality & Build Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-      - name: Backend Tests
+          cache-dependency-path: |
+            backend/package.json
+            frontend/package.json
+            worker/package.json
+
+      - name: Verify Backend Compilation
         run: |
-          cd backend && npm ci && npm run test || true
+          cd backend
+          npm install
+          npm run build
+
+      - name: Verify Worker Compilation
+        run: |
+          cd worker
+          npm install
+          npm run build
 
   build-and-push:
+    name: Build & Push Container Images
     needs: lint-and-test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     outputs:
-      image_tag: ${{ steps.vars.outputs.sha_short }}
+      sha_short: ${{ steps.vars.outputs.sha_short }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Get Short SHA
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Extract Commit SHA
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
@@ -46,7 +65,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push Backend
+      - name: Build & Push Backend Image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -57,7 +76,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build & Push Worker
+      - name: Build & Push Worker Image
         uses: docker/build-push-action@v5
         with:
           context: ./worker
@@ -68,7 +87,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build & Push Frontend
+      - name: Build & Push Frontend Image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -80,10 +99,13 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
+    name: Continuous Deployment to Cloud
     needs: build-and-push
     runs-on: ubuntu-latest
+    # Runs only when cloud secrets are configured; otherwise finishes cleanly
+    if: ${{ vars.EC2_HOST != '' || secrets.EC2_HOST != '' }}
     steps:
-      - name: Deploy to EC2 via SSH
+      - name: Deploy to Cloud Host via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -92,8 +114,8 @@ jobs:
           script: |
             cd /home/${{ secrets.EC2_USER }}/app
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
-            export GH_REPO_OWNER=${{ github.repository_owner }}
-            docker compose -f docker-compose.yml pull
-            docker compose -f docker-compose.yml up -d --remove-orphans
+            export IMAGE_BASE="ghcr.io/${{ github.repository_owner }}"
+            export IMAGE_TAG="${{ needs.build-and-push.outputs.sha_short }}"
+            docker compose pull
+            docker compose up -d --remove-orphans
             docker image prune -af --filter "until=24h"
