@@ -8,7 +8,7 @@ export default function Home() {
   const [statusData, setStatusData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
   const submitJob = async () => {
     if (!taskName) return;
