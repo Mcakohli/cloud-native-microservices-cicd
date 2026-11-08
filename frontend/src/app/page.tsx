@@ -3,92 +3,64 @@
 import { useState } from 'react';
 
 export default function Home() {
-  const [taskName, setTaskName] = useState('');
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [statusData, setStatusData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
-
-  const submitJob = async () => {
-    if (!taskName) return;
+  const handleSubmit = async () => {
     setLoading(true);
-    setStatusData(null);
+    setStatus('Submitting job to queue...');
+
     try {
-      const res = await fetch(`${API_BASE}/jobs/submit`, {
+      const response = await fetch('/api/jobs/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskName }),
+        body: JSON.stringify({ title: 'Task triggered from Web UI' }),
       });
-      const data = await res.json();
-      setJobId(data.jobId);
-      pollStatus(data.jobId);
-    } catch (err) {
-      console.error('Submission failed', err);
+
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      setStatus(`Success! Job enqueued with ID: ${data.id || 'Processed'}`);
+    } catch (err: any) {
+      setStatus(`Error submitting job: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const pollStatus = (id: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/jobs/${id}`);
-        const data = await res.json();
-        setStatusData(data);
-
-        if (data.state === 'completed' || data.state === 'failed') {
-          clearInterval(interval);
-        }
-      } catch (err) {
-        console.error('Polling failed', err);
-        clearInterval(interval);
-      }
-    }, 1000);
-  };
-
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
+    <main style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
       <h1>Cloud Engineering Task Processor</h1>
       <p>Submit a task to the NestJS backend, enqueue in Redis, and watch the worker process it.</p>
+      
+      <button 
+        onClick={handleSubmit} 
+        disabled={loading}
+        style={{
+          padding: '10px 20px',
+          fontSize: '16px',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          backgroundColor: '#0070f3',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px'
+        }}
+      >
+        {loading ? 'Processing...' : 'Submit Job'}
+      </button>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <input
-          type="text"
-          value={taskName}
-          onChange={(e) => setTaskName(e.target.value)}
-          placeholder="e.g. Generate Analytical Report"
-          style={{ flex: 1, padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
-        />
-        <button
-          onClick={submitJob}
-          disabled={loading || !taskName}
-          style={{ padding: '0.5rem 1rem', background: '#0070f3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          {loading ? 'Submitting...' : 'Submit Job'}
-        </button>
-      </div>
-
-      {jobId && (
-        <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '6px' }}>
-          <h3>Job Details</h3>
-          <p><strong>Job ID:</strong> {jobId}</p>
-          <p>
-            <strong>Status:</strong>{' '}
-            <span style={{
-              fontWeight: 'bold',
-              color: statusData?.state === 'completed' ? 'green' : statusData?.state === 'active' ? 'orange' : '#333'
-            }}>
-              {statusData?.state ? statusData.state.toUpperCase() : 'QUEUED'}
-            </span>
-          </p>
-
-          {statusData?.returnvalue && (
-            <div style={{ marginTop: '1rem', background: '#e6fffa', padding: '0.75rem', borderRadius: '4px' }}>
-              <strong>Result:</strong>
-              <pre>{JSON.stringify(statusData.returnvalue, null, 2)}</pre>
-            </div>
-          )}
+      {status && (
+        <div style={{
+          marginTop: '20px',
+          padding: '12px',
+          borderRadius: '4px',
+          backgroundColor: status.startsWith('Success') ? '#e6fffa' : '#ffebe6',
+          color: status.startsWith('Success') ? '#006d5b' : '#c53030',
+          border: `1px solid ${status.startsWith('Success') ? '#79d2b9' : '#feb2b2'}`
+        }}>
+          {status}
         </div>
       )}
     </main>
